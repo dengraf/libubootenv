@@ -107,10 +107,11 @@ static int ubi_get_dev_id_from_mtd(char *device)
 			if (fd < 0)
 				continue;
 
-			n = read(fd, data, sizeof(data));
+			n = read(fd, data, sizeof(data) - 1);
 			close(fd);
-			if (n < 0)
+			if (n <= 0)
 				continue;
+			data[n] = '\0';
 
 			if (sscanf(data, "%d", &num_mtd) != 1)
 				num_mtd = -1;
@@ -144,9 +145,10 @@ static int ubi_get_num_volume(char *device)
 	if (fd < 0)
 		return -1;
 
-	n = read(fd, data, sizeof(data));
-	if (n < 0)
+	n = read(fd, data, sizeof(data) - 1);
+	if (n <= 0)
 		goto out;
+	data[n] = '\0';
 
 	if (sscanf(data, "%d", &num_vol) != 1)
 		num_vol = -1;
@@ -172,9 +174,10 @@ static int ubi_get_volume_name(char *device, int vol_id, char vol_name[DEVNAME_M
 		return -1;
 
 	memset(data, 0, DEVNAME_MAX_LENGTH);
-	n = read(fd, data, DEVNAME_MAX_LENGTH);
-	if (n < 0)
+	n = read(fd, data, DEVNAME_MAX_LENGTH - 1);
+	if (n <= 0)
 		goto out;
+	data[n] = '\0';
 
 	memset(vol_name, 0, DEVNAME_MAX_LENGTH);
 	if (sscanf(data, "%s", vol_name) != 1)
@@ -222,6 +225,7 @@ int libubootenv_ubi_update_name(struct uboot_flash_env *dev)
 	char device[DEVNAME_MAX_LENGTH];
 	char volume[VOLNAME_MAX_LENGTH];
 	int dev_id, vol_id, fd, ret = -EBADF;
+	size_t vol_len;
 	char *sep;
 
 	if (!strncmp(dev->devname, DEVICE_MTD_NAME, strlen(DEVICE_MTD_NAME)))
@@ -233,7 +237,11 @@ int libubootenv_ubi_update_name(struct uboot_flash_env *dev)
 			memcpy(device, dev->devname, sep - dev->devname);
 
 			memset(volume, 0, VOLNAME_MAX_LENGTH);
-			sscanf(sep + 1, "%s", &volume[0]);
+			vol_len = strcspn(sep + 1, " \t\r\n");
+			if (vol_len >= VOLNAME_MAX_LENGTH)
+				return -EBADF;
+			memcpy(volume, sep + 1, vol_len);
+			volume[vol_len] = '\0';
 
 			ret = ubi_get_dev_id_from_mtd(device);
 			if (ret < 0) {
@@ -280,7 +288,11 @@ int libubootenv_ubi_update_name(struct uboot_flash_env *dev)
 		memcpy(device, dev->devname, sep - dev->devname);
 
 		memset(volume, 0, VOLNAME_MAX_LENGTH);
-		sscanf(sep + 1, "%s", &volume[0]);
+		vol_len = strcspn(sep + 1, " \t\r\n");
+		if (vol_len >= VOLNAME_MAX_LENGTH)
+			return -EBADF;
+		memcpy(volume, sep + 1, vol_len);
+		volume[vol_len] = '\0';
 
 		dev_id = ubi_get_dev_id(device);
 		if (dev_id < 0)
